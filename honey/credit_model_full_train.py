@@ -14,7 +14,7 @@ import sys
 import warnings
 import numpy as np
 import pandas as pd
-from scipy.stats import spearmanr
+from scipy.stats import spearmanr, rankdata
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import roc_auc_score
 import lightgbm as lgb
@@ -77,7 +77,7 @@ def main():
         "boosting_type": "gbdt",
         "n_estimators": 3000,
         "learning_rate": 0.03,
-        "num_leaves": 47,
+        "num_leaves": 55,
         "max_depth": 7,
         "min_child_samples": 40,
         "subsample": 0.8,
@@ -94,12 +94,12 @@ def main():
         "eval_metric": "auc",
         "n_estimators": 3000,
         "learning_rate": 0.03,
-        "max_depth": 6,
-        "min_child_weight": 40,
+        "max_depth": 5,
+        "min_child_weight": 50,
         "subsample": 0.8,
-        "colsample_bytree": 0.7,
-        "reg_alpha": 0.5,
-        "reg_lambda": 2.0,
+        "colsample_bytree": 0.8,
+        "reg_alpha": 1.0,
+        "reg_lambda": 3.0,
         "random_state": SEED,
         "verbosity": 0,
         "tree_method": "hist",
@@ -190,11 +190,14 @@ def main():
     full_cat_model.fit(X_full, y_full, verbose=0)
     test_preds_cat = full_cat_model.predict_proba(X_test)[:, 1]
 
-    # 4. Ensemble Full Models
+    # 4. Ensemble Full Models (Optimal Weighted Rank Blend)
     print("\n" + "=" * 65)
-    print("STEP 3: Ensembling Full Data Predictions")
+    print("STEP 3: Ensembling Full Data Predictions (Optimal Weighted Rank Blend)")
     print("=" * 65)
-    test_full_rank = rank_average(test_preds_lgb, test_preds_xgb, test_preds_cat)
+    r_xgb = rankdata(test_preds_xgb) / len(test_preds_xgb)
+    r_cat = rankdata(test_preds_cat) / len(test_preds_cat)
+    r_lgb = rankdata(test_preds_lgb) / len(test_preds_lgb)
+    test_full_rank = 0.429 * r_xgb + 0.376 * r_cat + 0.195 * r_lgb
 
     sub_full = pd.DataFrame({
         "ID": test_ids,

@@ -1,198 +1,218 @@
 Feature,Importance
-Age (in months),280
-income_change_ratio,218
-balance_change_m2,190
-balance_pct_change_recent,190
-Residence Period (in months),182
-Work Experience (months),179
-utilization_jump_recent,176
-repayment_regularity,159
-balance_change_m1,156
-repay_trend_ratio,149
-repay_to_balance_ratio,138
-repay_velocity_drop,133
-total_dti,131
-rent_to_income,124
-income_to_credit_limit,120
-Total Annual Income,120
-remaining_legal_capacity,120
-balance_ratio_m12_m9,118
-min_payment_to_monthly_income,115
-work_stability_ratio,114
-balance_cv,112
-work_exp_ratio_to_age_median,102
-balance_change_m6,101
-months_balance_stable,100
-utilization_6m_change,96
-Industry Category,95
-credit_headroom,94
-balance_change_m4,91
-balance_acceleration,90
-declared_debt_burden,88
-debt_ratio_to_age_median,87
-current_utilization,84
-borrow_acceleration_ratio,83
-income_diff_to_industry_mean,80
-balance_change_m5,80
-balance_change_m3,79
-borrow_trend_ratio,78
-balance_ratio_m12_m6,78
-net_flow_trend,77
-balance_std,74
-repay_borrow_ratio,73
-borrowing_std,73
-income_ratio_to_age_median,72
-Repayment Amount (Past 2 Months),71
-balance_momentum_recent_3m,70
-Repayment Amount_Month5,69
-total_known_debt,69
-max_utilization,67
-Rent Burden,66
-income_diff_to_occ_mean,66
-Desired Credit Limit,65
-debt_ratio_to_occ_median,65
-Declared Annual Income,64
-age_years,64
-income_ratio_to_occ_mean,63
-Application Channel,61
-repayment_std,61
-balance_range,60
-income_ratio_to_industry_mean,60
-Declared Borrowing Amount,60
-Balance 6 Months Ago,59
-Repayment Count (Past 6 Months),59
+Age (in months),244
+p_app_default,230
+balance_pct_change_recent,221
+balance_change_m2,215
+ratio_app_risk,204
+repay_trend_ratio,193
+income_change_ratio,182
+work_stability_ratio,181
+balance_change_m1,178
+repayment_regularity,175
+utilization_jump_recent,175
+Work Experience (months),171
+Residence Period (in months),165
+repay_to_balance_ratio,159
+rent_to_income,155
+p_app_active,154
+repay_velocity_drop,153
+balance_ratio_m12_m9,151
+income_change_pct,139
+min_payment_to_monthly_income,138
+months_balance_stable,129
+work_exp_ratio_to_age_median,122
+income_to_credit_limit,122
+balance_change_m6,122
+balance_cv,121
+total_dti,108
+borrow_trend_ratio,106
+debt_ratio_to_age_median,104
+credit_headroom,103
+balance_change_m3,101
+balance_change_m4,99
+max_utilization,99
+Rent Burden,94
+declared_debt_burden,92
+current_utilization,91
+balance_change_m5,90
+remaining_legal_capacity,89
+repayment_std,83
+cash_cycling_m6,82
+balance_residual_std,82
+borrow_acceleration_ratio,81
+balance_momentum_recent_3m,80
+total_known_debt,79
+utilization_6m_change,78
+Industry Category,78
+Repayment Count (Past 6 Months),77
+Repayment Amount_Month5,77
+balance_acceleration,77
+balance_curvature,76
+borrowing_std,76
+Repayment Amount (Past 2 Months),72
+net_flow_trend,72
+Balance 6 Months Ago,71
+debt_ratio_to_occ_median,71
+balance_ratio_m12_m6,70
+income_ratio_to_industry_mean,70
+balance_momentum_earlier_3m,70
+cash_cycling_m5,69
+net_principal_amortization,68
+income_diff_to_industry_mean,68
+Total Annual Income,68
+Declared Annual Income,66
+Balance 3 Months Ago,65
+net_flow_earlier_3m,65
+Declared Borrowing Amount,65
+repay_earlier_3m,64
+income_ratio_to_age_median,64
+balance_std,64
+balance_min,61
+months_to_regulatory_ceiling,61
+Repayment Amount_Month2,60
+Balance 1 Month Ago,60
+Repayment Amount (Past 6 Months),60
+Additional Borrowing Amount (Past 2 Months),59
+Outstanding Loan Balance,59
+Repayment Amount_Month4,59
+Payday,59
+avg_cash_cycling_6m,59
 Additional Borrowing Amount (Past 1 Month),58
-debt_ratio_to_industry_median,57
-balance_min,56
-repay_earlier_3m,55
-Additional Borrowing Amount_Month4,54
-Balance 2 Months Ago,54
-Payday,51
-Additional Borrowing Amount (Past 2 Months),50
-Residence Ownership Status,50
-Repayment Amount_Month3,48
-balance_intercept,48
-balance_slope,48
-Repayment Amount (Past 1 Month),48
-residence_years,48
-Occupation Category,46
-Repayment Amount (Past 6 Months),46
+Balance 5 Months Ago,58
+income_diff_to_occ_mean,58
+regulatory_stress_index,57
+balance_max,56
+Repayment Amount_Month6,56
+cash_cycling_m4,54
+Repayment Amount_Month3,54
+Additional Borrowing Amount_Month3,54
+balance_range,51
+Occupation Category,51
+balance_intercept,51
+Balance 2 Months Ago,50
+Additional Borrowing Amount_Month4,50
+Repayment Amount (Past 5 Months),50
+repay_borrow_ratio,50
+avg_draw_size,49
+income_ratio_to_occ_mean,49
+cash_cycling_m2,48
+recent_cash_cycling_3m,48
+debt_ratio_to_industry_median,47
+Additional Borrowing Amount_Month5,47
+Desired Credit Limit,47
+Repayment Count (Past 3 Months),46
+Repayment Amount (Past 1 Month),46
+net_flow_6m,45
+cash_cycling_m3,45
 Repayment Amount (Past 4 Months),45
-Company Size Category,45
 net_flow_recent_3m,45
-Repayment Count (Past 3 Months),45
-Company Size Category_changed,44
-Additional Borrowing Amount_Month6,44
-Declared Number of Borrowings,43
-avg_draw_size,43
-Balance 3 Months Ago,41
-balance_momentum_earlier_3m,41
-balance_max,41
-net_flow_earlier_3m,40
-net_flow_6m,38
-months_balance_decreasing,38
-Outstanding Loan Balance,38
-Additional Borrowing Amount_Month3,38
-Repayment Amount_Month4,37
-Additional Borrowing Amount_Month5,36
-Balance 4 Months Ago,36
-Balance 1 Month Ago,36
-Repayment Amount_Month6,36
-balance_mean,36
-Additional Borrowing Amount (Past 4 Months),35
-net_flow_month1,33
-Additional Borrowing Count (Past 6 Months),33
-Repayment Count (Past 4 Months),33
-Repayment Count (Past 2 Months),33
-Repayment Amount_Month2,33
-Additional Borrowing Amount (Past 5 Months),31
-Additional Borrowing Amount (Past 3 Months),31
-Repayment Amount (Past 3 Months),30
-Repayment Count_Month6,28
+Additional Borrowing Amount_Month6,45
+balance_slope,44
+age_years,44
+Application Channel,43
+Repayment Count (Past 4 Months),42
+Additional Borrowing Amount (Past 4 Months),41
+Additional Borrowing Amount (Past 5 Months),40
+cash_cycling_m1,39
+Additional Borrowing Amount (Past 3 Months),38
+Company Size Category_app,36
+Repayment Amount (Past 3 Months),36
+borrow_earlier_3m,36
+net_flow_month1,34
+Balance 4 Months Ago,34
+company_size_changed,33
+balance_mean,32
+Additional Borrowing Amount_Month2,32
+Repayment Count (Past 2 Months),31
+Number of Dependents,31
+Residence Ownership Status,30
+residence_years,29
+Additional Borrowing Amount (Past 6 Months),29
+Auto-Debit Flag,27
+Company Size Category,27
 Repayment Count (Past 5 Months),27
-Repayment Amount (Past 5 Months),27
-Additional Borrowing Amount_Month2,27
-Auto-Debit Flag,26
-Company Size Category_app,26
-contact_score,26
-Balance 5 Months Ago,26
-borrow_earlier_3m,25
-Additional Borrowing Count (Past 5 Months),25
-work_exp_clean,25
-deficit_months_count,25
-Home Phone Number Available,23
-Repayment Count_Month3,22
-Additional Borrowing Amount (Past 6 Months),20
-Residence Type,19
-Insurance Type_changed,19
-Additional Borrowing Count (Past 2 Months),17
-Additional Borrowing Count (Past 4 Months),16
-Employment Type Category,15
-company_size_direction,15
-Additional Borrowing Count_Month4,14
-months_zero_repayment,14
-paid_less_than_min_m1,14
-Additional Borrowing Amount_Month1,13
-Additional Borrowing Count (Past 3 Months),13
-log_Total Annual Income,12
-log_total_known_debt,12
-Repayment Amount_Month1,12
-Additional Borrowing Count_Month5,12
-Repayment Count_Month4,11
-Marital Status_changed,11
-repay_recent_3m,11
-Number of Dependents,10
-borrow_recent_3m,9
-Additional Borrowing Count_Month3,9
-Driver Licence Number Available,8
-Income Proof Submitted,8
-Repayment Count_Month5,8
-Insurance Type_app,8
-Additional Borrowing Count_Month6,8
-Business Entity Type,7
-Marital Status_app,7
-Number of Dependent Children,6
-Additional Borrowing Count (Past 1 Month),6
-months_balance_increasing,5
-auto_debit_dishonor_m1,5
-Number of Loan Settlements,5
-Repayment Count_Month2,5
-total_repayment_6m,5
-payday_is_25,4
-Marital Status,4
-consecutive_missed_months,4
-Insurance Type,3
-total_borrowing_6m,3
-avg_repayment_monthly,3
-months_with_borrowing,3
-Gender,3
-is_negative_work_exp,3
-recent_borrow_spike,2
-Repayment Count (Past 1 Month),2
+Repayment Count_Month6,25
+months_balance_decreasing,25
+Additional Borrowing Count (Past 5 Months),23
+deficit_months_count,23
+work_exp_clean,21
+Additional Borrowing Count_Month4,21
+insurance_job_loss_shock,20
+Additional Borrowing Count (Past 6 Months),18
+Additional Borrowing Count (Past 2 Months),18
+borrow_recent_3m,18
+insurance_type_changed,17
+log_total_known_debt,16
+Insurance Type,16
+months_zero_repayment,16
+Employment Type Category,16
+Declared Number of Borrowings,15
+log_Total Annual Income,15
+marital_status_changed,15
+Additional Borrowing Count (Past 4 Months),14
+Repayment Count_Month3,14
+Additional Borrowing Count_Month3,13
+Additional Borrowing Count_Month5,13
+total_repayment_6m,12
+Additional Borrowing Amount_Month1,12
+Number of Dependent Children,11
+Additional Borrowing Count_Month6,11
+Additional Borrowing Count (Past 3 Months),11
+paid_less_than_min_m1,9
+Residence Type,9
+contact_score,8
+Additional Borrowing Count (Past 1 Month),8
+Repayment Amount_Month1,8
+Home Phone Number Available,8
+company_size_downgraded,7
+Number of Loan Settlements,7
+Repayment Count_Month5,7
+total_borrowing_6m,6
+Gender,6
+Repayment Count_Month4,6
+consecutive_deficit_months,5
+Repayment Count (Past 1 Month),5
+months_no_borrowing,4
+min_payment_amount,4
+Repayment Count_Month2,4
+Repayment Count_Month1,4
+is_negative_work_exp,4
+months_balance_increasing,4
+Insurance Type_app,4
+months_with_borrowing,4
+Additional Borrowing Count_Month2,3
+months_zero_repayment_count,3
+repay_recent_3m,3
+Additional Borrowing Count_Month1,2
+avg_borrowing_monthly,2
+repay_collapsed_flag,2
+consecutive_missed_months,2
+Marital Status_app,2
+Business Entity Type,2
+Driver Licence Number Available,2
+Marital Status,1
+avg_repayment_monthly,1
 has_settled_loans,1
-avg_borrowing_monthly,1
-missed_last_3_months,1
-Employer Phone Number Available,1
-months_no_borrowing,1
-months_at_zero_balance,1
-Additional Borrowing Count_Month2,1
-Additional Borrowing Count_Month1,1
-missed_m1,0
-months_zero_repayment_count,0
+log_Outstanding Loan Balance,1
+auto_debit_dishonor_m1,1
+income_dropped_25pct,0
 log_total_borrowing_6m,0
 log_total_repayment_6m,0
-log_Outstanding Loan Balance,0
-has_reached_zero_balance,0
-Repayment Count_Month1,0
-min_payment_amount,0
-borrow_without_repay_m1,0
-auto_debit_dishonor_recent,0
-missed_m2,0
-consecutive_deficit_months,0
-repay_collapsed_flag,0
-Mobile Phone Number Available,0
 exceeds_legal_debt_limit,0
+recent_borrow_spike,0
+auto_debit_dishonor_recent,0
+Income Proof Submitted,0
+income_dropped_10pct,0
+has_reached_zero_balance,0
+missed_last_3_months,0
+months_at_zero_balance,0
+Employer Phone Number Available,0
+missed_m2,0
+borrow_without_repay_m1,0
 is_maxed_out,0
+missed_m1,0
 payday_is_eom,0
+payday_is_25,0
+Mobile Phone Number Available,0
 is_deleveraging,0
 missed_last_2_months,0
