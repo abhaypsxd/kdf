@@ -1,1 +1,4 @@
-
+cache/
+preds/
+__pycache__/
+catboost_info/
