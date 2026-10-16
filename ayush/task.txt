@@ -1,0 +1,76 @@
+In this competition, you will build a credit scoring model that predicts which unsecured loan customers will default by month 24, using application data and account behavior observed during their first year. All customers in the scoring population had not defaulted during their first 12 months.
+
+
+Description
+Credit risk assessment is at the core of every lending business. At approval, applicants are evaluated using application scorecards. But risk changes after approval, and a customer's repayment behavior often shows warning signs long before a default occurs. Behavioral scoring models re-assess risk for existing customers based on how they actually manage their accounts.
+
+In this hackathon, you will work with anonymized data from AIFUL's unsecured lending portfolio. Every customer in the scoring population made it through the first 12 months without defaulting. Your task is to estimate the probability of default for each of these customers by month 24, using only information available at the month-12 observation point.
+
+The data is provided across multiple files. customers.csv contains application-time attributes, while train.csv and test.csv contain account-level behavioral data for months 6 to 12, including balances, additional borrowing and repayments.
+
+Key challenges include:
+
+Integrating application and behavioral data
+Engineering features from monthly account history
+Handling an imbalanced target
+Building models that generalize rather than overfit to the leaderboard
+
+
+Evaluation
+Submissions are evaluated on the area under the Receiver Operating Characteristic curve (ROC AUC) between the predicted probability and the observed target.
+
+ROC AUC measures a model's ability to rank customers by risk. It is the probability that a randomly chosen customer who defaulted receives a higher predicted score than a randomly chosen customer who did not. A score of 1.0 indicates perfect separation, while a score of 0.5 indicates no discriminatory power. In credit risk, this is closely related to the Gini coefficient (Gini = 2 × AUC − 1), a standard measure of scorecard performance.
+
+Because AUC depends only on the ranking of predictions, you should submit continuous probability scores rather than binary labels.
+
+The public leaderboard is calculated on approximately 50% of the test data. Final rankings are determined by the remaining 50% (the private leaderboard), revealed at the end of the competition. Participants are strongly encouraged to rely on their own cross-validation rather than the public leaderboard when selecting final submissions.
+
+Each team may select up to two final submissions for private leaderboard scoring. If none are selected, the two submissions with the best public leaderboard scores are used automatically.
+
+Submission File
+For each ID in test.csv, predict the probability that the customer is in default status by month 24. The submission file must contain a header and follow this format:
+
+ID	24-Month Default Flag
+1001	0.12
+1002	0.48
+1003	0.05
+
+
+Dataset Description
+The dataset is drawn from consumer lending portfolio. It covers accounts that applied for and received a loan in 2018. All customer information has been anonymized.
+
+Your objective is to estimate the probability that a customer is in default status by month 24, for customers who did not default during their first 12 months, using only information available at the month-12 observation point.
+
+Before you begin: Detailed explanations of the loan system, the default definition, every column, value codes and worked examples are provided in data_dictionary_customers.xlsx and data_dictionary_train_test.xlsx. Please read both files carefully before starting your analysis. Most questions about the data are answered there.
+
+Data quality: As with most real-world data, some columns may contain missing values, outliers or values that appear inconsistent. These have been left as they are in the source data. Identifying and handling them appropriately is part of the challenge.
+
+
+Observation Timeline
+Period	Description
+Month 0	Application and loan origination. Attributes in customers.csv are captured at this point.
+Months 1–12	First year. Customers who defaulted in this period are flagged in customers.csv and excluded from train.csv and test.csv.
+Months 6–12	Behavioral observation window. Account activity is provided in train.csv and test.csv.
+Month 12	Observation point (reference date). All predictive information is as of this point.
+Months 13–24	Outcome window. The target records whether the customer is in default status by month 24.
+Files
+customers.csv Application, demographic and employment details for all customers, captured at the time of application. This includes both customers who defaulted within the first 12 months (12-Month Default Flag = 1) and those who did not (12-Month Default Flag = 0). train.csv and test.csv contain only customers who did not default within the first 12 months. The number of non-default customers in customers.csv may be higher than in train.csv and test.csv combined, because some customers closed their accounts or fully repaid their loans before month 12 and therefore have no payment history.
+
+train.csv Account-level behavioral data for the training population at the month-12 observation point, together with the target variable 24-Month Default Flag.
+
+test.csv The same features as train.csv for the test population, without the target. A probability must be predicted for every ID in this file.
+
+sample_submission.csv A sample submission file in the correct format.
+
+data_dictionary_customers.xlsx Column definitions, value codes and lookup tables for the columns in customers.csv.
+
+data_dictionary_train_test.xlsx Explanation of the loan system, column definitions, value codes and worked examples for the columns in train.csv and test.csv.
+
+Key Information
+Join key: ID is common to all files. All IDs in train.csv and test.csv are present in customers.csv.
+Default definition: An account becomes delinquent when no payment is received by the monthly due date. If no payment is received for three consecutive months, the contract is terminated and the account is classified as having defaulted. A default flag is 1 only if this condition has been met on or before the given month.
+Target: 24-Month Default Flag (1 = in default status by month 24, 0 = not in default).
+Balance columns show the outstanding balance at a single month-end, counted backwards from the reference date.
+Additional Borrowing and Repayment columns are cumulative. For example, Past 3 Months is the total over the 3 months up to the reference date and includes Past 1 Month and Past 2 Months.
+Time-varying attributes: Marital Status, Insurance Type and Company Size Category appear in both customers.csv (value at application) and train.csv / test.csv (value at month 12). Differences are expected.
+Missing values may be present in some columns.
