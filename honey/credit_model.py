@@ -1,11 +1,14 @@
 """
-Credit Scoring Model — Full Pipeline (Optimized v2)
+Credit Scoring Model — Full Pipeline (Optimized v4)
 ===================================================
 Predicts probability of default by month 24 for customers
 who survived 12 months on a revolving credit product.
 
-Evaluation: ROC AUC on 5-fold Stratified Cross-Validation
-Models: LightGBM + XGBoost + CatBoost + Stacking Ensemble
+Optimizations:
+1. Retained high-signal peer groupby aggregations and velocity metrics.
+2. Removed target encoding to eliminate greedy target overfitting.
+3. Enhanced L1/L2 regularization (alpha=1.0, lambda=3.0) and colsample=0.8.
+4. 5-Fold Stratified Cross-Validation with Rank & Optimal Weighted Ensembling.
 """
 
 import os
@@ -14,6 +17,7 @@ import warnings
 import numpy as np
 import pandas as pd
 from scipy.stats import rankdata
+from scipy.optimize import minimize
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import roc_auc_score
 from sklearn.linear_model import LogisticRegression
@@ -43,16 +47,13 @@ def load_and_merge_data():
     print(f"  Test:      {test.shape}")
     print(f"  Default rate: {train['24-Month Default Flag'].mean():.4f}")
 
-    # Exclude 12-month defaulters (not present in train/test)
     cust_clean = customers[customers["12-Month Default Flag"] == 0].copy()
     cust_clean = cust_clean.drop(columns=["12-Month Default Flag"])
 
-    # Time-varying columns appearing in both datasets
     time_varying_cols = ["Marital Status", "Insurance Type", "Company Size Category"]
     cust_rename = {col: f"{col}_app" for col in time_varying_cols}
     cust_clean = cust_clean.rename(columns=cust_rename)
 
-    # Merge
     train_merged = train.merge(cust_clean, on="ID", how="left")
     test_merged = test.merge(cust_clean, on="ID", how="left")
 
@@ -61,7 +62,7 @@ def load_and_merge_data():
 
 
 def engineer_features(df):
-    """Vectorized feature engineering incorporating behavioral and regulatory credit signals."""
+    """Vectorized feature engineering incorporating behavioral, regulatory, and peer signals."""
     feat = df.copy()
 
     # ----------------------------------------------------------
@@ -92,8 +93,7 @@ def engineer_features(df):
     ]
     b_mat = feat[balance_cols].values.astype(float)
 
-    # Fast closed-form linear regression slope & intercept over x = [0..6]
-    # sum((x - 3)^2) = 28
+    # Fast closed-form linear regression slope & intercept
     weights = np.array([-3, -2, -1, 0, 1, 2, 3]) / 28.0
     feat["balance_slope"] = b_mat.dot(weights)
     feat["balance_intercept"] = b_mat.mean(axis=1) - 3.0 * feat["balance_slope"]
@@ -105,6 +105,10 @@ def engineer_features(df):
     feat["balance_max"] = b_mat.max(axis=1)
     feat["balance_range"] = feat["balance_max"] - feat["balance_min"]
     feat["balance_cv"] = feat["balance_std"] / (feat["balance_mean"] + 1.0)
+
+    # Zero-balance milestones (revolving payoff behavior)
+    feat["has_reached_zero_balance"] = (b_mat == 0).any(axis=1).astype(int)
+    feat["months_at_zero_balance"] = (b_mat == 0).sum(axis=1)
 
     # Balance ratios and recent changes
     feat["balance_ratio_m12_m6"] = feat["Outstanding Loan Balance"] / (feat["Balance 6 Months Ago"] + 1.0)
@@ -126,7 +130,7 @@ def engineer_features(df):
     feat["months_balance_stable"] = (b_diffs == 0).sum(axis=1)
 
     # ----------------------------------------------------------
-    # 3. Delinquency & Repayment Signals (Crucial Default Precursors)
+    # 3. Delinquency & Repayment Velocity Signals
     # ----------------------------------------------------------
     repay_month_cols = [f"Repayment Amount_Month{i}" for i in range(1, 7)]
     repay_count_month_cols = [f"Repayment Count_Month{i}" for i in range(1, 7)]
@@ -156,22 +160,25 @@ def engineer_features(df):
         (m1_0 & m2_0 & m3_0 & m4_0).astype(int)
     )
 
-    # Repayment trend
+    # Repayment velocity & drop
+    avg_repay_2_6 = (feat["total_repayment_6m"] - feat["Repayment Amount_Month1"]) / 5.0
+    feat["repay_velocity_drop"] = feat["Repayment Amount_Month1"] / (avg_repay_2_6 + 1.0)
+    feat["repay_collapsed_flag"] = (feat["repay_velocity_drop"] < 0.3).astype(int)
+
     feat["repay_recent_3m"] = feat["Repayment Amount (Past 3 Months)"]
     feat["repay_earlier_3m"] = feat["total_repayment_6m"] - feat["repay_recent_3m"]
     feat["repay_trend_ratio"] = feat["repay_recent_3m"] / (feat["repay_earlier_3m"] + 1.0)
     feat["repay_to_balance_ratio"] = feat["total_repayment_6m"] / (feat["balance_mean"] + 1.0)
 
-    # Auto-Debit Dishonor Flag (promised automatic bank withdrawal, but payment was 0)
+    # Auto-Debit Dishonor Flag
     if "Auto-Debit Flag" in feat.columns:
         feat["auto_debit_dishonor_m1"] = ((feat["Auto-Debit Flag"] == 1) & (feat["Repayment Amount_Month1"] == 0)).astype(int)
         feat["auto_debit_dishonor_recent"] = ((feat["Auto-Debit Flag"] == 1) & (feat["missed_last_2_months"] == 1)).astype(int)
 
     # ----------------------------------------------------------
-    # 4. Borrowing Behavior & Cash Drain
+    # 4. Borrowing Behavior & Cash Drain Dynamics
     # ----------------------------------------------------------
     borrow_month_cols = [f"Additional Borrowing Amount_Month{i}" for i in range(1, 7)]
-    borrow_count_month_cols = [f"Additional Borrowing Count_Month{i}" for i in range(1, 7)]
 
     feat["total_borrowing_6m"] = feat["Additional Borrowing Amount (Past 6 Months)"]
     feat["avg_borrowing_monthly"] = feat["total_borrowing_6m"] / 6.0
@@ -181,19 +188,30 @@ def engineer_features(df):
     feat["months_no_borrowing"] = 6 - feat["months_with_borrowing"]
     feat["avg_draw_size"] = feat["total_borrowing_6m"] / (feat["Additional Borrowing Count (Past 6 Months)"] + 1.0)
 
+    # Borrowing acceleration
+    borrow_m1_2 = feat["Additional Borrowing Amount (Past 2 Months)"]
+    borrow_m5_6 = feat["Additional Borrowing Amount_Month5"] + feat["Additional Borrowing Amount_Month6"]
+    feat["borrow_acceleration_ratio"] = borrow_m1_2 / (borrow_m5_6 + 1.0)
+
     feat["borrow_recent_3m"] = feat["Additional Borrowing Amount (Past 3 Months)"]
     feat["borrow_earlier_3m"] = feat["total_borrowing_6m"] - feat["borrow_recent_3m"]
     feat["borrow_trend_ratio"] = feat["borrow_recent_3m"] / (feat["borrow_earlier_3m"] + 1.0)
     feat["recent_borrow_spike"] = (feat["Additional Borrowing Amount_Month1"] > 2.0 * feat["avg_borrowing_monthly"]).astype(int)
 
-    # Distress: Borrowing while not repaying (debt pyramiding)
+    # Distress: Borrowing while not repaying
     feat["borrow_without_repay_m1"] = ((feat["Additional Borrowing Amount_Month1"] > 0) & (feat["Repayment Amount_Month1"] == 0)).astype(int)
-    borrow_no_repay_months = 0
+
+    # Net cash deficit streak
+    deficit_months = 0
     for i in range(1, 7):
-        borrow_no_repay_months = borrow_no_repay_months + (
-            (feat[f"Additional Borrowing Amount_Month{i}"] > 0) & (feat[f"Repayment Amount_Month{i}"] == 0)
-        ).astype(int)
-    feat["months_borrow_without_repay"] = borrow_no_repay_months
+        is_deficit = (feat[f"Additional Borrowing Amount_Month{i}"] > feat[f"Repayment Amount_Month{i}"]).astype(int)
+        deficit_months = deficit_months + is_deficit
+    feat["deficit_months_count"] = deficit_months
+
+    d1 = (feat["Additional Borrowing Amount_Month1"] > feat["Repayment Amount_Month1"]).astype(int)
+    d2 = (feat["Additional Borrowing Amount_Month2"] > feat["Repayment Amount_Month2"]).astype(int)
+    d3 = (feat["Additional Borrowing Amount_Month3"] > feat["Repayment Amount_Month3"]).astype(int)
+    feat["consecutive_deficit_months"] = d1 + (d1 & d2) + (d1 & d2 & d3)
 
     # ----------------------------------------------------------
     # 5. Net Cash Flow
@@ -209,7 +227,6 @@ def engineer_features(df):
     # ----------------------------------------------------------
     # 6. Regulatory Debt Burden & Moneylending Act Cap (総量規制)
     # ----------------------------------------------------------
-    # In Japan, unsecured borrowing is legally capped at 1/3 (33.3%) of annual income
     declared_borrow = feat["Declared Borrowing Amount"].fillna(0) if "Declared Borrowing Amount" in feat.columns else 0
     total_annual_inc = feat["Total Annual Income"].fillna(0)
     feat["total_known_debt"] = feat["Outstanding Loan Balance"] + declared_borrow
@@ -217,7 +234,6 @@ def engineer_features(df):
     feat["exceeds_legal_debt_limit"] = (feat["total_dti"] >= 0.333).astype(int)
     feat["remaining_legal_capacity"] = (total_annual_inc / 3.0) - feat["total_known_debt"]
 
-    # Minimum payment burden (~3% of outstanding balance in revolving credit)
     min_payment = feat["Outstanding Loan Balance"] * 0.03
     feat["min_payment_amount"] = min_payment
     feat["paid_less_than_min_m1"] = (feat["Repayment Amount_Month1"] < min_payment).astype(int)
@@ -232,9 +248,10 @@ def engineer_features(df):
         feat["max_utilization"] = feat["balance_max"] / credit_limit
         feat["is_maxed_out"] = (feat["Outstanding Loan Balance"] >= credit_limit).astype(int)
         feat["utilization_jump_recent"] = (feat["Outstanding Loan Balance"] - feat["Balance 1 Month Ago"]) / credit_limit
+        feat["utilization_6m_change"] = (feat["Outstanding Loan Balance"] - feat["Balance 6 Months Ago"]) / credit_limit
+        feat["credit_headroom"] = credit_limit - feat["Outstanding Loan Balance"]
 
     if "Declared Annual Income" in feat.columns:
-        # Winsorize extreme income outliers at 99.5th percentile for ratio stability
         inc_cap = feat["Declared Annual Income"].quantile(0.995)
         clean_declared_inc = feat["Declared Annual Income"].clip(upper=inc_cap)
         feat["income_to_credit_limit"] = clean_declared_inc / (feat["Desired Credit Limit"] + 1.0)
@@ -252,7 +269,6 @@ def engineer_features(df):
     if "Residence Period (in months)" in feat.columns:
         feat["residence_years"] = (feat["Residence Period (in months)"] + 12) / 12.0
 
-    # Work experience clean & flags
     if "Work Experience (months)" in feat.columns:
         feat["is_negative_work_exp"] = (feat["Work Experience (months)"] < 0).astype(int)
         feat["work_exp_clean"] = feat["Work Experience (months)"].clip(lower=0)
@@ -260,19 +276,43 @@ def engineer_features(df):
             adult_months = (feat["Age (in months)"] - 18 * 12).clip(lower=12)
             feat["work_stability_ratio"] = feat["work_exp_clean"] / adult_months
 
-    # Settlements history
     if "Number of Loan Settlements" in feat.columns:
         feat["has_settled_loans"] = (feat["Number of Loan Settlements"] > 0).astype(int)
 
-    # Contact accessibility score
     contact_cols = [c for c in feat.columns if "Phone Number Available" in c or "Licence" in c]
     if contact_cols:
         feat["contact_score"] = feat[contact_cols].sum(axis=1)
 
-    # Payday flags
     if "Payday" in feat.columns:
         feat["payday_is_25"] = (feat["Payday"] == 25).astype(int)
         feat["payday_is_eom"] = (feat["Payday"].isin([28, 29, 30, 31])).astype(int)
+
+    # ----------------------------------------------------------
+    # 8. Unsupervised Groupby Aggregations (Peer Standing)
+    # ----------------------------------------------------------
+    if "Industry Category" in feat.columns:
+        ind_mean_inc = feat.groupby("Industry Category")["Total Annual Income"].transform("mean")
+        feat["income_ratio_to_industry_mean"] = feat["Total Annual Income"] / (ind_mean_inc + 1.0)
+        feat["income_diff_to_industry_mean"] = feat["Total Annual Income"] - ind_mean_inc
+        ind_med_debt = feat.groupby("Industry Category")["total_known_debt"].transform("median")
+        feat["debt_ratio_to_industry_median"] = feat["total_known_debt"] / (ind_med_debt + 1.0)
+
+    if "Occupation Category" in feat.columns:
+        occ_mean_inc = feat.groupby("Occupation Category")["Total Annual Income"].transform("mean")
+        feat["income_ratio_to_occ_mean"] = feat["Total Annual Income"] / (occ_mean_inc + 1.0)
+        feat["income_diff_to_occ_mean"] = feat["Total Annual Income"] - occ_mean_inc
+        occ_med_debt = feat.groupby("Occupation Category")["total_known_debt"].transform("median")
+        feat["debt_ratio_to_occ_median"] = feat["total_known_debt"] / (occ_med_debt + 1.0)
+
+    if "age_years" in feat.columns:
+        age_bracket = (feat["age_years"] // 10).clip(2, 6)
+        age_med_inc = feat.groupby(age_bracket)["Total Annual Income"].transform("median")
+        feat["income_ratio_to_age_median"] = feat["Total Annual Income"] / (age_med_inc + 1.0)
+        age_med_debt = feat.groupby(age_bracket)["total_known_debt"].transform("median")
+        feat["debt_ratio_to_age_median"] = feat["total_known_debt"] / (age_med_debt + 1.0)
+        if "work_exp_clean" in feat.columns:
+            age_med_work = feat.groupby(age_bracket)["work_exp_clean"].transform("median")
+            feat["work_exp_ratio_to_age_median"] = feat["work_exp_clean"] / (age_med_work + 1.0)
 
     # Time-varying changes
     for col in ["Marital Status", "Insurance Type", "Company Size Category"]:
@@ -308,7 +348,7 @@ def run_pipeline():
     train_df, test_df = load_and_merge_data()
 
     print("\n" + "=" * 60)
-    print("PHASE 2: Feature Engineering")
+    print("PHASE 2: Feature Engineering & Peer Aggregations")
     print("=" * 60)
     train_feat = engineer_features(train_df)
     test_feat = engineer_features(test_df)
@@ -317,6 +357,7 @@ def run_pipeline():
 
     TARGET = "24-Month Default Flag"
     DROP_COLS = ["ID", TARGET]
+
     feature_cols = [c for c in train_feat.columns if c not in DROP_COLS]
     feature_cols = train_feat[feature_cols].select_dtypes(include=[np.number]).columns.tolist()
 
@@ -330,7 +371,7 @@ def run_pipeline():
     test_ids = test_feat["ID"].values
 
     print("\n" + "=" * 60)
-    print("PHASE 3: Modeling Setup")
+    print("PHASE 3: Modeling Setup & Cross-Validation")
     print("=" * 60)
     print(f"  Features used: {len(feature_cols)}")
     print(f"  Train samples: {len(X)} (Pos: {y.sum()}, Neg: {(1-y).sum()})")
@@ -340,7 +381,6 @@ def run_pipeline():
     SEED = 42
     skf = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED)
 
-    # Model out-of-fold containers
     oof_lgb = np.zeros(len(X))
     oof_xgb = np.zeros(len(X))
     oof_cat = np.zeros(len(X))
@@ -351,7 +391,7 @@ def run_pipeline():
 
     fold_scores = {"lgb": [], "xgb": [], "cat": []}
 
-    # Model Hyperparameters (Optimized for ROC AUC ranking)
+    # Tuned hyperparameters with colsample=0.8 and regularized alphas/lambdas
     lgb_params = {
         "objective": "binary",
         "metric": "auc",
@@ -359,12 +399,12 @@ def run_pipeline():
         "n_estimators": 3000,
         "learning_rate": 0.03,
         "num_leaves": 47,
-        "max_depth": 7,
-        "min_child_samples": 40,
+        "max_depth": 6,
+        "min_child_samples": 50,
         "subsample": 0.8,
-        "colsample_bytree": 0.7,
-        "reg_alpha": 0.5,
-        "reg_lambda": 2.0,
+        "colsample_bytree": 0.8,
+        "reg_alpha": 1.0,
+        "reg_lambda": 3.0,
         "random_state": SEED,
         "verbose": -1,
         "n_jobs": -1,
@@ -376,11 +416,11 @@ def run_pipeline():
         "n_estimators": 3000,
         "learning_rate": 0.03,
         "max_depth": 6,
-        "min_child_weight": 40,
+        "min_child_weight": 50,
         "subsample": 0.8,
-        "colsample_bytree": 0.7,
-        "reg_alpha": 0.5,
-        "reg_lambda": 2.0,
+        "colsample_bytree": 0.8,
+        "reg_alpha": 1.0,
+        "reg_lambda": 3.0,
         "random_state": SEED,
         "verbosity": 0,
         "tree_method": "hist",
@@ -401,9 +441,7 @@ def run_pipeline():
         "task_type": "CPU",
     }
 
-    print("\n" + "=" * 60)
-    print("PHASE 4: 5-Fold Stratified Cross-Validation")
-    print("=" * 60)
+    print("\n  Executing 5-Fold Stratified Cross-Validation...")
 
     for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
         print(f"\n  --- Fold {fold + 1}/{N_FOLDS} ---")
@@ -449,10 +487,10 @@ def run_pipeline():
         print(f"    LGB: {lgb_auc:.5f} | XGB: {xgb_auc:.5f} | CAT: {cat_auc:.5f}")
 
     # ============================================================
-    # 5. ENSEMBLE & VALIDATION EVALUATION
+    # 5. ENSEMBLE & OPTIMAL WEIGHTING EVALUATION
     # ============================================================
     print("\n" + "=" * 60)
-    print("PHASE 5: Out-of-Fold Validation & Ensemble Comparison")
+    print("PHASE 4: Out-of-Fold Validation & Ensemble Comparison")
     print("=" * 60)
 
     lgb_oof_auc = roc_auc_score(y, oof_lgb)
@@ -471,7 +509,19 @@ def run_pipeline():
     oof_rank = rank_average(oof_lgb, oof_xgb, oof_cat)
     rank_auc = roc_auc_score(y, oof_rank)
 
-    # Stacking with Logistic Regression (Meta-model)
+    # Optimal Weighted Blend via Nelder-Mead
+    def loss_func(weights):
+        w = np.array(weights)
+        w = w / np.sum(w)
+        blend = w[0] * oof_xgb + w[1] * oof_cat + w[2] * oof_lgb
+        return -roc_auc_score(y, blend)
+
+    opt_res = minimize(loss_func, [0.45, 0.35, 0.20], method="Nelder-Mead")
+    opt_weights = opt_res.x / np.sum(opt_res.x)
+    oof_opt_weighted = opt_weights[0] * oof_xgb + opt_weights[1] * oof_cat + opt_weights[2] * oof_lgb
+    opt_weighted_auc = roc_auc_score(y, oof_opt_weighted)
+
+    # Stacked Logistic Regression
     oof_stack_features = np.column_stack([oof_lgb, oof_xgb, oof_cat])
     test_stack_features = np.column_stack([test_lgb, test_xgb, test_cat])
 
@@ -482,14 +532,15 @@ def run_pipeline():
     test_stacked = meta_model.predict_proba(test_stack_features)[:, 1]
 
     print(f"\n  Ensemble Comparison:")
-    print(f"  - Simple Average OOF AUC: {simple_auc:.5f}")
-    print(f"  - Rank Average   OOF AUC: {rank_auc:.5f}")
-    print(f"  - Stacked (LR)   OOF AUC: {stacked_auc:.5f}")
+    print(f"  - Simple Average        OOF AUC: {simple_auc:.5f}")
+    print(f"  - Rank Average          OOF AUC: {rank_auc:.5f}")
+    print(f"  - Optimal Weighted Blend OOF AUC: {opt_weighted_auc:.5f} (Weights: XGB={opt_weights[0]:.3f}, CAT={opt_weights[1]:.3f}, LGB={opt_weights[2]:.3f})")
+    print(f"  - Stacked (LR)          OOF AUC: {stacked_auc:.5f}")
 
-    # Determine winning model
     candidates = {
         "Simple Average": (simple_auc, (test_lgb + test_xgb + test_cat) / 3.0),
         "Rank Average": (rank_auc, rank_average(test_lgb, test_xgb, test_cat)),
+        "Optimal Weighted Blend": (opt_weighted_auc, opt_weights[0] * test_xgb + opt_weights[1] * test_cat + opt_weights[2] * test_lgb),
         "Stacked LogisticRegression": (stacked_auc, test_stacked),
     }
     best_name = max(candidates.keys(), key=lambda k: candidates[k][0])
@@ -501,7 +552,7 @@ def run_pipeline():
     # 6. EXPORT SUBMISSIONS & ARTIFACTS
     # ============================================================
     print("\n" + "=" * 60)
-    print("PHASE 6: Generating Output Files")
+    print("PHASE 5: Generating Output Files")
     print("=" * 60)
 
     sub_df = pd.DataFrame({"ID": test_ids, "24-Month Default Flag": best_test_preds})
@@ -509,7 +560,6 @@ def run_pipeline():
     sub_df.to_csv(sub_path, index=False)
     print(f"  Saved main submission: {sub_path} ({len(sub_df)} rows)")
 
-    # Save feature importances
     feat_imp = pd.DataFrame({
         "Feature": feature_cols,
         "Importance": lgb_model.feature_importances_,
@@ -518,11 +568,10 @@ def run_pipeline():
     feat_imp.to_csv(feat_imp_path, index=False)
     print(f"  Saved feature importances: {feat_imp_path}")
 
-    # Save validation metrics summary file
     metrics_summary = pd.DataFrame({
-        "Model": ["LightGBM", "XGBoost", "CatBoost", "Simple Average", "Rank Average", "Stacked LogisticRegression"],
-        "OOF_AUC": [lgb_oof_auc, xgb_oof_auc, cat_oof_auc, simple_auc, rank_auc, stacked_auc],
-        "Gini": [2 * x - 1 for x in [lgb_oof_auc, xgb_oof_auc, cat_oof_auc, simple_auc, rank_auc, stacked_auc]],
+        "Model": ["LightGBM", "XGBoost", "CatBoost", "Simple Average", "Rank Average", "Optimal Weighted Blend", "Stacked LogisticRegression"],
+        "OOF_AUC": [lgb_oof_auc, xgb_oof_auc, cat_oof_auc, simple_auc, rank_auc, opt_weighted_auc, stacked_auc],
+        "Gini": [2 * x - 1 for x in [lgb_oof_auc, xgb_oof_auc, cat_oof_auc, simple_auc, rank_auc, opt_weighted_auc, stacked_auc]],
     })
     metrics_path = os.path.join(OUTPUT_DIR, "validation_metrics.csv")
     metrics_summary.to_csv(metrics_path, index=False)
