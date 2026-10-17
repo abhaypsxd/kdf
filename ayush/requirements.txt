@@ -1,0 +1,14 @@
+# Versions used for the reported results (Python 3.13).
+# xgboost: 3.0.x is built for CUDA 12 (NVIDIA driver >= 525). Newer releases (3.4+) need a
+# CUDA 13 driver (>= 580) and silently fall back to CPU on older drivers.
+numpy==2.5.2
+pandas==3.0.5
+scikit-learn==1.9.0
+scipy==1.18.1
+xgboost==3.0.5
+catboost==1.2.10
+optuna==5.0.0
+SQLAlchemy==2.1.4
+openpyxl
+# torch with CUDA: install separately to match the remote machine's CUDA, e.g.
+#   pip install torch --index-url https://download.pytorch.org/whl/cu126

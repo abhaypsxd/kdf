@@ -1,4 +1,11 @@
-cache/
+# large or rebuildable artefacts stay local
+cache/*
 preds/
 __pycache__/
 catboost_info/
+
+# small files needed to reproduce results on another machine
+!cache/selected_features.json
+!cache/best_params_xgb.json
+!cache/best_params_xgbl.json
+logs/
