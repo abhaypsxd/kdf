@@ -10,6 +10,8 @@
 # Usage:  bash run_variants.sh [stage ...]        stages: prep select tune train blend
 #         bash run_variants.sh                    (all stages, in order)
 #         N_TRIALS=60 CAT_TRIALS=30 bash run_variants.sh tune
+#         VARIANTS="fs2 fs3" bash run_variants.sh train   (only these variants; blend always
+#                                                         blends whichever preds exist)
 # Stages can be rerun independently; tuning resumes from cache/optuna.db.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -21,7 +23,7 @@ POOL="forecast dev app2 freq peer shape"
 
 declare -A FEATS=([fs1]="selected" [fs2]="sel_v2" [fs3]="all")
 declare -A EXTRA=([fs1]="forecast" [fs2]="$POOL" [fs3]="forecast")
-VARIANTS="fs1 fs2 fs3"
+VARIANTS=${VARIANTS:-fs1 fs2 fs3}   # e.g. VARIANTS="fs2 fs3" to skip fs1
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 run() { local name=$1; shift; log "$name: $*"; "$@" 2>&1 | tee "logs/$name.log"; }
@@ -57,14 +59,18 @@ stage_train() {
 
 stage_blend() {
     all=""
-    for v in $VARIANTS; do
-        models="xgbl_${v} xgb_${v} cat_${v} tabm_${v}"
+    for v in fs1 fs2 fs3; do
+        models=""
+        for m in xgbl xgb cat tabm; do
+            if [ -f "preds/${m}_${v}.npz" ]; then models="$models ${m}_${v}"; fi
+        done
+        if [ -z "$models" ]; then continue; fi
         all="$all $models"
         run "blend_${v}" python blend.py $models --out "$v"
     done
     run blend_bag python blend.py $all --out bag
     log "summary of nested (honest) blend scores:"
-    grep -H "nested" logs/blend_*.log
+    grep -H "nested" logs/blend_*.log || true
 }
 
 stages=${*:-prep select tune train blend}
