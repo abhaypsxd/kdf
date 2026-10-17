@@ -11,8 +11,9 @@ of the *training* part, then the model is refit on the full training part with t
 round count. The outer validation fold is never used for early stopping, so the OOF
 AUC is an unbiased estimate.
 
-Usage:  python train_gbm.py xgb|xgbl|cat [--repeats 3]
-Writes: preds/<model>.npz with oof (n_train,), test (n_test,), and per-repeat AUCs.
+Usage:  python train_gbm.py xgb|xgbl|cat [--repeats 3] [--feats all|selected] [--tag name]
+                            [--extra forecast]
+Writes: preds/<tag or model>.npz with oof (n_train,), test (n_test,), and per-repeat AUCs.
 """
 
 import argparse
@@ -44,10 +45,14 @@ CAT_PARAMS = dict(iterations=10000, learning_rate=0.03, depth=6, l2_leaf_reg=5,
                   border_count=254, metric_period=50)
 
 
-def load_params(name):
-    """Optuna-tuned params (tune.py) override the defaults when present."""
+def load_params(name, feats="all"):
+    """Optuna-tuned params (tune.py) override the defaults when present. Params tuned on
+    the selected feature set are preferred for --feats selected."""
     base = {"xgb": XGB_PARAMS, "xgbl": XGBL_PARAMS, "cat": CAT_PARAMS}[name]
     path = os.path.join(CACHE, f"best_params_{name}.json")
+    sel_path = os.path.join(CACHE, f"best_params_{name}_sel.json")
+    if feats == "selected" and os.path.exists(sel_path):
+        path = sel_path
     if os.path.exists(path):
         with open(path) as f:
             tuned = json.load(f)
@@ -90,12 +95,36 @@ def prepare(name, df, cols):
     return tr, te, Xtr, Xte, cat_idx
 
 
-def run(name, repeats):
-    df, _ = get_features()
+def select_columns(df, feats):
     cols = feature_columns(df)
+    if feats == "selected":
+        with open(os.path.join(CACHE, "selected_features.json")) as f:
+            keep = set(json.load(f))
+        cols = [c for c in cols if c in keep]
+    print(f"using {len(cols)} features ({feats})")
+    return cols
+
+
+def add_extra(df, cols, extra):
+    """Merge extra feature sets saved by other scripts (e.g. forecast.py) by ID."""
+    import pickle
+    for name in extra or []:
+        with open(os.path.join(CACHE, f"{name}_features.pkl"), "rb") as f:
+            ex = pickle.load(f)
+        new = [c for c in ex.columns if c != "ID"]
+        df = df.merge(ex, on="ID", how="left")
+        cols = cols + new
+        print(f"added {len(new)} '{name}' features")
+    return df, cols
+
+
+def run(name, repeats, feats="all", tag=None, extra=None):
+    df, _ = get_features()
+    cols = select_columns(df, feats)
+    df, cols = add_extra(df, cols, extra)
     tr, te, Xtr_all, Xte, cat_idx = prepare(name, df, cols)
     y = tr[TARGET].values.astype(int)
-    params = load_params(name)
+    params = load_params(name, feats)
 
     oof_all = np.zeros((repeats, len(tr)))
     test_pred = np.zeros(len(te))
@@ -119,7 +148,7 @@ def run(name, repeats):
     oof = np.mean([pd.Series(o).rank(pct=True).values for o in oof_all], axis=0)
     print(f"[{name}] mean per-repeat AUC {np.mean(aucs):.5f} +- {np.std(aucs):.5f} | "
           f"repeat-averaged OOF AUC {roc_auc_score(y, oof):.5f}")
-    out = os.path.join(PRED_DIR, f"{name}.npz")
+    out = os.path.join(PRED_DIR, f"{tag or name}.npz")
     np.savez(out, oof=oof, oof_all=oof_all, test=test_pred, aucs=np.array(aucs),
              test_id=te["ID"].values, train_id=tr["ID"].values)
     print(f"saved {out}")
@@ -129,5 +158,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("model", choices=["xgb", "xgbl", "cat"])
     ap.add_argument("--repeats", type=int, default=3)
+    ap.add_argument("--feats", choices=["all", "selected"], default="all")
+    ap.add_argument("--tag", default=None, help="output name in preds/ (default: model name)")
+    ap.add_argument("--extra", nargs="*", default=[],
+                    help="extra feature sets from cache/<name>_features.pkl, e.g. forecast")
     args = ap.parse_args()
-    run(args.model, args.repeats)
+    run(args.model, args.repeats, args.feats, args.tag, args.extra)

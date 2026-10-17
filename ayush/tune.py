@@ -4,7 +4,7 @@ here because the search only ranks configs; final scores come from train_gbm.py'
 honest protocol. The best params are written to cache/best_params_<model>.json after
 every improving trial, so the search can be stopped (Ctrl+C) at any time.
 
-Usage: python tune.py xgb|xgbl [n_trials]
+Usage: python tune.py xgb|xgbl [n_trials] [all|selected]
 """
 
 import json
@@ -18,12 +18,13 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import roc_auc_score
 
 from features import TARGET, CACHE, feature_columns, get_features
-from train_gbm import XGB_PARAMS, XGBL_PARAMS
+from train_gbm import XGB_PARAMS, XGBL_PARAMS, select_columns
 
 warnings.filterwarnings("ignore")
 df, _ = get_features()
 tr = df[df.is_train == 1].reset_index(drop=True)
-cols = feature_columns(df)
+FEATS = sys.argv[3] if len(sys.argv) > 3 else "all"
+cols = select_columns(df, FEATS)
 X, y = tr[cols], tr[TARGET].values.astype(int)
 FOLDS = list(StratifiedKFold(5, shuffle=True, random_state=314).split(X, y))
 
@@ -55,7 +56,7 @@ if __name__ == "__main__":
     name = sys.argv[1]
     n_trials = int(sys.argv[2]) if len(sys.argv) > 2 else 40
     base = dict({"xgb": XGB_PARAMS, "xgbl": XGBL_PARAMS}[name], learning_rate=0.03, n_estimators=5000)
-    out = os.path.join(CACHE, f"best_params_{name}.json")
+    out = os.path.join(CACHE, f"best_params_{name}{'_sel' if FEATS == 'selected' else ''}.json")
 
     def objective(t):
         return cv(dict(base, **suggest(t, name)))

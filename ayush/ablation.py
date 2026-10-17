@@ -31,7 +31,7 @@ if __name__ == "__main__":
     df, groups = get_features()
     tr = df[df.is_train == 1].reset_index(drop=True)
     y = tr[TARGET].values.astype(int)
-    order = ["raw", "base", "delinq", "minpay", "util", "date", "ratio", "app"]
+    order = ["raw", "base", "delinq", "minpay", "arrears", "util", "limit", "date", "ratio", "app"]
     cols = []
     for g in order:
         cols = cols + groups[g]

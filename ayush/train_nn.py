@@ -133,7 +133,7 @@ def run(repeats):
                 preds_v.append(predict(model, T(xt_tr[b]), T(xs_tr[b])))
                 preds_t.append(predict(model, xt_te, xs_te))
             pv, pt = np.mean(preds_v, 0), np.mean(preds_t, 0)
-            oof_all[r, b] = pv
+            oof_all[r, b] = pd.Series(pv).rank(pct=True).values  # NN output scale shifts per fold
             test_pred += pd.Series(pt).rank(pct=True).values / (5 * repeats)
             print(f"  [nn] repeat {r} fold {f}: AUC {roc_auc_score(y[b], pv):.5f} epochs {ep}", flush=True)
         aucs.append(roc_auc_score(y, oof_all[r]))
