@@ -1,14 +1,17 @@
-# Versions used for the reported results (Python 3.13).
-# xgboost: 3.0.x is built for CUDA 12 (NVIDIA driver >= 525). Newer releases (3.4+) need a
-# CUDA 13 driver (>= 580) and silently fall back to CPU on older drivers.
-numpy==2.5.2
-pandas==3.0.5
-scikit-learn==1.9.0
-scipy==1.18.1
+# Works on Python 3.10-3.13. Local results were produced with numpy 2.5.2, pandas 3.0.5,
+# scikit-learn 1.9.0, catboost 1.2.10, optuna 5.0.0 (Python 3.13); minimum versions below
+# keep older Pythons installable.
+#
+# xgboost is pinned: 3.0.x is built for CUDA 12 (NVIDIA driver >= 525). Newer releases
+# (3.4+) need a CUDA 13 driver (>= 580) and silently fall back to CPU on older drivers.
+numpy>=1.26
+pandas>=2.1
+scikit-learn>=1.4
+scipy>=1.11
 xgboost==3.0.5
-catboost==1.2.10
-optuna==5.0.0
-SQLAlchemy==2.1.4
+catboost>=1.2.5
+optuna>=4.0
+SQLAlchemy>=2.0
 openpyxl
-# torch with CUDA: install separately to match the remote machine's CUDA, e.g.
+# torch with CUDA: install separately to match the machine's CUDA, e.g.
 #   pip install torch --index-url https://download.pytorch.org/whl/cu126
