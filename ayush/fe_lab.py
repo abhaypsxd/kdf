@@ -22,6 +22,7 @@ directly:  python train_gbm.py xgbl --feats selected --extra forecast peer ...
 Usage:  python fe_lab.py                     # base + every family
         python fe_lab.py dev shape           # base + only these families
         python fe_lab.py --combo dev peer    # base + all listed families together
+        python fe_lab.py --build-only        # only write the unsupervised family caches
         python fe_lab.py --fair ...          # scale colsample_bytree so every run samples
                                              # the same number of features per tree as base
                                              # (otherwise extra features dilute strong ones)
@@ -269,6 +270,9 @@ def main():
             pickle.dump(F, f)
         built[fam] = F
         print(f"built {fam}: {F.shape[1] - 1} features -> {path} ({time.time() - t0:.0f}s)", flush=True)
+
+    if "--build-only" in sys.argv:  # just write cache/<family>_features.pkl
+        return
 
     is_tr = (df["is_train"] == 1).values
     tr = df[is_tr].reset_index(drop=True)

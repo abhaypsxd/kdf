@@ -47,7 +47,8 @@ CAT_PARAMS = dict(iterations=10000, learning_rate=0.03, depth=6, l2_leaf_reg=5,
 
 def param_suffix(feats="all", extra=None):
     """Tuned-params file suffix for a feature set, e.g. '_sel_forecast'."""
-    return ("_sel" if feats == "selected" else "") + "".join(f"_{e}" for e in (extra or []))
+    head = {"all": "", "selected": "_sel"}.get(feats, f"_{feats}")
+    return head + "".join(f"_{e}" for e in (extra or []))
 
 
 def load_params(name, feats="all", extra=None):
@@ -121,10 +122,32 @@ def add_extra(df, cols, extra):
     return df, cols
 
 
-def run(name, repeats, feats="all", tag=None, extra=None):
+def build_matrix(feats="all", extra=None):
+    """Feature cache + extra sets, filtered by a selection file.
+
+    feats = "all" keeps everything; any other name reads cache/<feats>_features.json
+    ("selected" -> selected_features.json). A plain list selects among the base columns
+    and keeps every extra column; a {"keep", "pool"} dict (select_features.py --extra)
+    selects among all pooled columns.
+    """
     df, _ = get_features()
-    cols = select_columns(df, feats)
-    df, cols = add_extra(df, cols, extra)
+    base = feature_columns(df)
+    df, cols = add_extra(df, base, extra)
+    if feats != "all":
+        with open(os.path.join(CACHE, f"{feats}_features.json")) as f:
+            sel = json.load(f)
+        keep, pool = (set(sel), set(base)) if isinstance(sel, list) else (set(sel["keep"]), set(sel["pool"]))
+        missing = sorted(keep - set(cols))
+        if missing:
+            raise SystemExit(f"{feats}: {len(missing)} selected features are not loaded "
+                             f"(pass the same --extra sets used for selection): {missing[:5]}")
+        cols = [c for c in cols if c in keep or c not in pool]
+    print(f"using {len(cols)} features ({feats}{' + ' + ' + '.join(extra) if extra else ''})")
+    return df, cols
+
+
+def run(name, repeats, feats="all", tag=None, extra=None):
+    df, cols = build_matrix(feats, extra)
     tr, te, Xtr_all, Xte, cat_idx = prepare(name, df, cols)
     y = tr[TARGET].values.astype(int)
     params = load_params(name, feats, extra)
@@ -161,7 +184,8 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("model", choices=["xgb", "xgbl", "cat"])
     ap.add_argument("--repeats", type=int, default=3)
-    ap.add_argument("--feats", choices=["all", "selected"], default="all")
+    ap.add_argument("--feats", default="all",
+                    help="all, selected, or the --out name given to select_features.py")
     ap.add_argument("--tag", default=None, help="output name in preds/ (default: model name)")
     ap.add_argument("--extra", nargs="*", default=[],
                     help="extra feature sets from cache/<name>_features.pkl, e.g. forecast")

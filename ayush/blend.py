@@ -5,7 +5,8 @@ Weights are non-negative and fitted by maximising OOF AUC. To keep the reported
 score honest, a nested estimate is also printed: weights fitted on 4/5 of the OOF
 rows and scored on the held-out 1/5.
 
-Usage: python blend.py [model names ...]   (default: every preds/*.npz)
+Usage: python blend.py [model names ...] [--out name]   (default: every preds/*.npz)
+  --out fs1 writes submission_fs1.csv, submission_fs1_equal.csv, validation_metrics_fs1.csv
 """
 
 import glob
@@ -42,7 +43,7 @@ def fit_weights(P, y):
     return w / w.sum()
 
 
-def main(names):
+def main(names, out=None):
     files = {os.path.basename(p)[:-4]: p for p in glob.glob(os.path.join(PRED_DIR, "*.npz"))}
     names = names or sorted(files)
     preds = {n: np.load(files[n]) for n in names}
@@ -79,18 +80,27 @@ def main(names):
     sample = pd.read_csv(os.path.join(DATA_DIR, "sample_submission.csv"))
     sub = sample[["ID"]].merge(sub, on="ID", how="left")
     assert sub["24-Month Default Flag"].notna().all() and len(sub) == len(sample)
-    sub.to_csv(os.path.join(HERE, "submission.csv"), index=False)
+    f_sub = f"submission_{out}.csv" if out else "submission.csv"
+    f_eq = f"submission_{out}_equal.csv" if out else "submission_equal_weight.csv"
+    f_met = f"validation_metrics_{out}.csv" if out else "validation_metrics.csv"
+    sub.to_csv(os.path.join(HERE, f_sub), index=False)
     pd.DataFrame({"ID": ref["test_id"], "24-Month Default Flag": Pt.mean(1)}).pipe(
         lambda d: sample[["ID"]].merge(d, on="ID")).to_csv(
-        os.path.join(HERE, "submission_equal_weight.csv"), index=False)
+        os.path.join(HERE, f_eq), index=False)
     rows = [(n, roc_auc_score(y, P[:, i]), w[i]) for i, n in enumerate(names)]
     rows += [("equal_rank_avg", roc_auc_score(y, eq), np.nan),
              ("weighted_blend_nested", nested_auc, np.nan)]
     pd.DataFrame(rows, columns=["Model", "OOF_AUC", "Weight"]).assign(
-        Gini=lambda d: 2 * d.OOF_AUC - 1).to_csv(os.path.join(HERE, "validation_metrics.csv"),
+        Gini=lambda d: 2 * d.OOF_AUC - 1).to_csv(os.path.join(HERE, f_met),
                                                  index=False)
-    print(f"Wrote submission.csv ({len(sub)} rows), submission_equal_weight.csv, validation_metrics.csv")
+    print(f"Wrote {f_sub} ({len(sub)} rows), {f_eq}, {f_met}")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    argv = sys.argv[1:]
+    out = None
+    if "--out" in argv:
+        i = argv.index("--out")
+        out = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
+    main(argv, out)
