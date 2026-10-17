@@ -10,7 +10,7 @@ with Parameter-Efficient Ensembling") with a GRU branch over the monthly history
 Same honest CV protocol as the GBMs: the best epoch is chosen on an inner 10% holdout of
 the training fold; the outer fold is only predicted.
 
-Usage:  python train_tabm.py [--repeats 3] [--feats all|selected] [--k 32] [--tag tabm]
+Usage:  python train_tabm.py [--repeats 3] [--feats all|selected] [--extra forecast] [--k 32] [--tag tabm]
 """
 
 import argparse
@@ -24,7 +24,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.metrics import roc_auc_score
 
 from features import TARGET, BAL_COLS, get_features
-from train_gbm import SEEDS, PRED_DIR, select_columns
+from train_gbm import SEEDS, PRED_DIR, select_columns, add_extra
 
 DEV = "cuda"
 assert torch.cuda.is_available(), "CUDA GPU not visible to PyTorch"
@@ -139,9 +139,10 @@ def train_fold(edges, xt, xs, y, xt_h, xs_h, y_h, seed, k, max_epochs=40, patien
     return model, best, ep + 1
 
 
-def run(repeats, feats, k, tag):
+def run(repeats, feats, k, tag, extra=None):
     df, _ = get_features()
     cols = select_columns(df, feats)
+    df, cols = add_extra(df, cols, extra)
     is_tr = (df.is_train == 1).values
     tab = df[cols].astype(np.float32).values
     tab = np.where(np.isnan(tab), np.nanmedian(tab, axis=0), tab).astype(np.float32)
@@ -186,5 +187,7 @@ if __name__ == "__main__":
     ap.add_argument("--feats", choices=["all", "selected"], default="all")
     ap.add_argument("--k", type=int, default=32, help="number of TabM ensemble members")
     ap.add_argument("--tag", default="tabm")
+    ap.add_argument("--extra", nargs="*", default=[],
+                    help="extra feature sets from cache/<name>_features.pkl, e.g. forecast")
     args = ap.parse_args()
-    run(args.repeats, args.feats, args.k, args.tag)
+    run(args.repeats, args.feats, args.k, args.tag, args.extra)

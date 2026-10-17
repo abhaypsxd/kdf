@@ -152,7 +152,8 @@ cd ayush
 python features.py                    # build cache/features.pkl (~5-10 min)
 python select_features.py 30          # feature pruning
 python forecast.py                    # month-13 forecaster features
-python tune.py xgbl 40 selected       # optional re-tuning
+python tune.py xgbl 40 selected forecast   # tune on the exact feature set; train_gbm.py picks
+                                           # cache/best_params_xgbl_sel_forecast.json automatically
 
 python train_gbm.py xgbl --repeats 5 --feats selected --extra forecast --tag xgbl_sel_fc
 python train_gbm.py xgb  --repeats 3 --feats selected --extra forecast --tag xgb_sel_fc

@@ -4,7 +4,13 @@ here because the search only ranks configs; final scores come from train_gbm.py'
 honest protocol. The best params are written to cache/best_params_<model>.json after
 every improving trial, so the search can be stopped (Ctrl+C) at any time.
 
-Usage: python tune.py xgb|xgbl [n_trials] [all|selected]
+Runs are resumable: trials are stored in cache/optuna.db, so `python tune.py xgbl 10 ...`
+run twice gives one 20-trial search. Each new search first evaluates the previously tuned
+params for that model, and the search itself uses a faster learning rate (0.05) than final
+training; only the ranking of configs matters here.
+
+Usage: python tune.py xgb|xgbl [n_trials] [all|selected] [extra feature sets ...]
+  e.g. python tune.py xgbl 10 selected forecast
 """
 
 import json
@@ -18,13 +24,15 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import roc_auc_score
 
 from features import TARGET, CACHE, feature_columns, get_features
-from train_gbm import XGB_PARAMS, XGBL_PARAMS, select_columns
+from train_gbm import XGB_PARAMS, XGBL_PARAMS, select_columns, add_extra, param_suffix
 
 warnings.filterwarnings("ignore")
 df, _ = get_features()
-tr = df[df.is_train == 1].reset_index(drop=True)
 FEATS = sys.argv[3] if len(sys.argv) > 3 else "all"
+EXTRA = sys.argv[4:]
 cols = select_columns(df, FEATS)
+df, cols = add_extra(df, cols, EXTRA)
+tr = df[df.is_train == 1].reset_index(drop=True)
 X, y = tr[cols], tr[TARGET].values.astype(int)
 FOLDS = list(StratifiedKFold(5, shuffle=True, random_state=314).split(X, y))
 
@@ -32,7 +40,7 @@ FOLDS = list(StratifiedKFold(5, shuffle=True, random_state=314).split(X, y))
 def cv(params):
     oof = np.zeros(len(y))
     for a, b in FOLDS:
-        m = xgb.XGBClassifier(**params, early_stopping_rounds=200, random_state=0)
+        m = xgb.XGBClassifier(**params, early_stopping_rounds=100, random_state=0)
         m.fit(X.iloc[a], y[a], eval_set=[(X.iloc[b], y[b])], verbose=False)
         oof[b] = m.predict_proba(X.iloc[b])[:, 1]
     return roc_auc_score(y, oof)
@@ -48,15 +56,30 @@ def suggest(t, name):
     if name == "xgb":
         p["max_depth"] = t.suggest_int("max_depth", 3, 8)
     else:
-        p["max_leaves"] = t.suggest_int("max_leaves", 7, 127, log=True)
+        p["max_leaves"] = t.suggest_int("max_leaves", 7, 255, log=True)
     return p
+
+
+def known_good(name):
+    """Previously tuned params for this model (any feature set), to seed a new search."""
+    import glob
+    keys = ("subsample", "colsample_bytree", "reg_lambda", "reg_alpha", "gamma",
+            "min_child_weight", "max_depth" if name == "xgb" else "max_leaves")
+    seeds = []
+    for path in sorted(glob.glob(os.path.join(CACHE, f"best_params_{name}*.json"))):
+        with open(path) as f:
+            p = {k: v for k, v in json.load(f).items() if k in keys}
+        if len(p) == len(keys) and p not in seeds:
+            seeds.append(p)
+    return seeds
 
 
 if __name__ == "__main__":
     name = sys.argv[1]
-    n_trials = int(sys.argv[2]) if len(sys.argv) > 2 else 40
-    base = dict({"xgb": XGB_PARAMS, "xgbl": XGBL_PARAMS}[name], learning_rate=0.03, n_estimators=5000)
-    out = os.path.join(CACHE, f"best_params_{name}{'_sel' if FEATS == 'selected' else ''}.json")
+    n_trials = int(sys.argv[2]) if len(sys.argv) > 2 else 10
+    suffix = param_suffix(FEATS, EXTRA)
+    base = dict({"xgb": XGB_PARAMS, "xgbl": XGBL_PARAMS}[name], learning_rate=0.05, n_estimators=5000)
+    out = os.path.join(CACHE, f"best_params_{name}{suffix}.json")
 
     def objective(t):
         return cv(dict(base, **suggest(t, name)))
@@ -68,9 +91,15 @@ if __name__ == "__main__":
                 json.dump(study.best_params, f, indent=1)
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=0))
-    study.enqueue_trial({k: v for k, v in base.items() if k in
-                         ("subsample", "colsample_bytree", "reg_lambda", "min_child_weight",
-                          "max_depth", "max_leaves")} | {"reg_alpha": 1e-3, "gamma": 0.0})
+    study = optuna.create_study(direction="maximize", study_name=f"{name}{suffix}",
+                                storage=f"sqlite:///{os.path.join(CACHE, 'optuna.db')}",
+                                load_if_exists=True, sampler=optuna.samplers.TPESampler())
+    done = len(study.trials)
+    if done == 0:
+        for p in known_good(name):
+            study.enqueue_trial(p)
+        print(f"new search '{name}{suffix}', starting from {len(known_good(name))} known-good configs")
+    else:
+        print(f"resuming search '{name}{suffix}' with {done} previous trials, best {study.best_value:.5f}")
     study.optimize(objective, n_trials=n_trials, callbacks=[save_best])
     print("best", study.best_value, study.best_params, "->", out)

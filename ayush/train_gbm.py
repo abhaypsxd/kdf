@@ -45,19 +45,22 @@ CAT_PARAMS = dict(iterations=10000, learning_rate=0.03, depth=6, l2_leaf_reg=5,
                   border_count=254, metric_period=50)
 
 
-def load_params(name, feats="all"):
-    """Optuna-tuned params (tune.py) override the defaults when present. Params tuned on
-    the selected feature set are preferred for --feats selected."""
+def param_suffix(feats="all", extra=None):
+    """Tuned-params file suffix for a feature set, e.g. '_sel_forecast'."""
+    return ("_sel" if feats == "selected" else "") + "".join(f"_{e}" for e in (extra or []))
+
+
+def load_params(name, feats="all", extra=None):
+    """Optuna-tuned params (tune.py) override the defaults when present. The file tuned on
+    the exact feature set is preferred, then the selected set, then the full set."""
     base = {"xgb": XGB_PARAMS, "xgbl": XGBL_PARAMS, "cat": CAT_PARAMS}[name]
-    path = os.path.join(CACHE, f"best_params_{name}.json")
-    sel_path = os.path.join(CACHE, f"best_params_{name}_sel.json")
-    if feats == "selected" and os.path.exists(sel_path):
-        path = sel_path
-    if os.path.exists(path):
-        with open(path) as f:
-            tuned = json.load(f)
-        print(f"using tuned params from {path}: {tuned}")
-        return dict(base, **tuned)
+    for suffix in dict.fromkeys([param_suffix(feats, extra), param_suffix(feats), ""]):
+        path = os.path.join(CACHE, f"best_params_{name}{suffix}.json")
+        if os.path.exists(path):
+            with open(path) as f:
+                tuned = json.load(f)
+            print(f"using tuned params from {path}: {tuned}")
+            return dict(base, **tuned)
     return base
 
 
@@ -124,7 +127,7 @@ def run(name, repeats, feats="all", tag=None, extra=None):
     df, cols = add_extra(df, cols, extra)
     tr, te, Xtr_all, Xte, cat_idx = prepare(name, df, cols)
     y = tr[TARGET].values.astype(int)
-    params = load_params(name, feats)
+    params = load_params(name, feats, extra)
 
     oof_all = np.zeros((repeats, len(tr)))
     test_pred = np.zeros(len(te))
