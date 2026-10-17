@@ -22,6 +22,9 @@ directly:  python train_gbm.py xgbl --feats selected --extra forecast peer ...
 Usage:  python fe_lab.py                     # base + every family
         python fe_lab.py dev shape           # base + only these families
         python fe_lab.py --combo dev peer    # base + all listed families together
+        python fe_lab.py --fair ...          # scale colsample_bytree so every run samples
+                                             # the same number of features per tree as base
+                                             # (otherwise extra features dilute strong ones)
 """
 
 import json
@@ -243,6 +246,7 @@ def cv_score(X, y, clean, params, cats=None):
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     combo = "--combo" in sys.argv
+    fair = "--fair" in sys.argv
     fams = args or FAMILIES
 
     df, _ = get_features()
@@ -279,14 +283,19 @@ def main():
             if fam != "te":
                 X = pd.concat([X, built[fam][is_tr].drop(columns="ID").reset_index(drop=True)], axis=1)
         cats = cats_all if "te" in extra_fams else None
+        n_feats = X.shape[1] + (cats.shape[1] if cats is not None else 0)
+        p = params
+        if fair:  # keep the expected number of features per tree equal to the base run
+            p = dict(params, colsample_bytree=params["colsample_bytree"] * len(cols) / n_feats)
         t = time.time()
-        o, w = cv_score(X, y, clean, params, cats)
+        o, w = cv_score(X, y, clean, p, cats)
         print(f"{name:22s} overall {o.mean():.5f} {np.round(o, 5)}  clean {w.mean():.5f}  "
               f"({X.shape[1] + (cats.shape[1] if cats is not None else 0)} feats, {time.time() - t:.0f}s)",
               flush=True)
         return o, w
 
-    print(f"\n{REPEATS} repeats x 5 folds, xgbl (tuned params, lr 0.05), base = 129 selected + 12 forecast")
+    print(f"\n{REPEATS} repeats x 5 folds, xgbl (tuned params, lr 0.05), base = 129 selected + 12 forecast"
+          + (" | fair: colsample scaled to base feature count" if fair else ""))
     base_o, base_w = run("base", [])
     rows = [("base", base_o.mean(), 0.0, 0.0, base_w.mean(), 0.0)]
     runs = [("+".join(fams), fams)] if combo else [(f, [f]) for f in fams]
@@ -295,6 +304,7 @@ def main():
         d = o - base_o
         rows.append((name, o.mean(), d.mean(), (d > 0).mean(), w.mean(), (w - base_w).mean()))
 
+    rows = [(r[0] + (" (fair)" if fair and r[0] != "base" else ""),) + tuple(r[1:]) for r in rows]
     res = pd.DataFrame(rows, columns=["family", "overall_auc", "delta_overall", "share_repeats_up",
                                       "clean_auc", "delta_clean"])
     print("\n" + res.to_string(index=False, float_format=lambda v: f"{v:.5f}"))
