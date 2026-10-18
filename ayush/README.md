@@ -4,8 +4,7 @@
 AIFUL card loan without defaulting. Using what is known at month 12, rank them by their risk
 of being in default by month 24. Metric: ROC AUC.
 
-**Result.** Kaggle public AUC **0.76813** (leaderboard leader: 0.77152). Honest
-cross-validated AUC 0.757, against 0.752 for the team's earlier baseline.
+**Result.** Kaggle public AUC **0.76813** .
 
 > The story in one line: **the data was the model.** The big gains came from understanding
 > how AIFUL's loan works and how customers behave — fixing a timing artefact in "missed
